@@ -1,0 +1,13 @@
+{
+  "name": "stickgameonline",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail -n web,server -c cyan,magenta \"npm run dev -w @stickgame/web\" \"npm run dev -w @stickgame/server\"",
+    "build": "npm run build -w @stickgame/shared && npm run build -w @stickgame/web && npm run build -w @stickgame/server",
+    "test": "npm run test -w @stickgame/shared && npm run test -w @stickgame/server && npm run test -w @stickgame/web",
+    "start": "npm run start -w @stickgame/server"
+  },
+  "devDependencies": { "concurrently": "^9.2.1", "typescript": "^6.0.3" }
+}
