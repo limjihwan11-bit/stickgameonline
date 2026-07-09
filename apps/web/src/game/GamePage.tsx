@@ -4,9 +4,10 @@ import { applyAction, chooseAIAction, createGame, legalSplits, type Difficulty, 
 import { useSession } from "../session";
 import { rules } from "../ui";
 import { isUpwardStrike, useHandCamera, type TrackedHand } from "./useHandCamera";
-import { isPointInExpandedRect, mapCameraPointToStage } from "./gestureMapping";
+import { CAMERA_HIT_MARGIN, CAMERA_READY_Y, isPointInExpandedRect, mapCameraPointToStage } from "./gestureMapping";
 import { VirtualHand, virtualHandPosition } from "./VirtualHand";
 import { getOpponentSeats } from "./boardSeats";
+import { FingerIcon } from "./FingerIcon";
 
 const names = ["느긋한 두부", "매콤한 만두", "단단한 묵"];
 const makeId = () => crypto.randomUUID();
@@ -210,11 +211,11 @@ export function GamePage() {
       if (!active) { strikeArmed.current[hand.hand] = false; continue; }
       const palm = hand.landmarks[9] || hand.landmarks[0];
       const mapped = mapCameraPointToStage({ x: 1 - palm.x, y: palm.y });
-      if (mapped.y > .62) strikeArmed.current[hand.hand] = true;
+      if (mapped.y > CAMERA_READY_Y) strikeArmed.current[hand.hand] = true;
       const x = stageRect.left + mapped.x * stageRect.width; const y = stageRect.top + mapped.y * stageRect.height;
       for (const element of stage.querySelectorAll<HTMLElement>("[data-opponent-target]")) {
         const rect = element.getBoundingClientRect();
-        if (!isPointInExpandedRect({ x, y }, rect, 28)) continue;
+        if (!isPointInExpandedRect({ x, y }, rect, CAMERA_HIT_MARGIN)) continue;
         const targetPlayerId = element.dataset.targetPlayer!; const targetHand = Number(element.dataset.targetHand) as 0 | 1;
         currentAim = targetKey(targetPlayerId, targetHand);
         if (isUpwardStrike(hand, strikeArmed.current[hand.hand])) {
@@ -236,7 +237,7 @@ export function GamePage() {
   }, [camera.hands, camera.status, local, processGestures, socket]);
 
   useEffect(() => {
-    if (camera.status === "running") setMessage("가상 손을 아래에서 장전한 뒤 상대 손 카드를 향해 빠르게 올려치세요!");
+    if (camera.status === "running") setMessage("손을 아래에 한 번 내렸다가 상대 손 가까이 올리면 공격됩니다.");
   }, [camera.status]);
 
   if (!nickname) return <Navigate to="/" replace />;
@@ -251,17 +252,17 @@ export function GamePage() {
     <div className={`game-stage board-${game.players.length} ${impact ? "impacting" : ""}`} ref={stageRef}>
       <div className="action-lines" />
       <div className="opponents-grid">{opponents.map((player, index) => <article className={`opponent-card seat-${opponentSeats[index]} ${game.status === "playing" && actor.id === player.id ? "active-player" : ""}`} key={player.id}><header><span className="avatar">{player.nickname[0]}</span><div><b>{player.nickname}</b><small>{player.connected ? isDead(player.hands) ? "탈락" : "플레이 중" : "재접속 대기"}</small></div><em>#{index + 2}</em></header><div className="game-hands">{player.hands.map((value, hand) => {
-        const key = targetKey(player.id, hand); return <button key={hand} disabled={!myTurn || value === 0 || me.hands.every((number) => number === 0)} data-opponent-target data-player-hand={key} data-target-player={player.id} data-target-hand={hand} className={`game-hand ${value === 0 ? "dead" : ""} ${aimedTarget === key ? "aimed" : ""} ${impact?.target === key ? "hit" : ""}`}><span>{fingerEmoji(value)}</span><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
+        const key = targetKey(player.id, hand); return <button key={hand} disabled={!myTurn || value === 0 || me.hands.every((number) => number === 0)} data-opponent-target data-player-hand={key} data-target-player={player.id} data-target-hand={hand} className={`game-hand ${value === 0 ? "dead" : ""} ${aimedTarget === key ? "aimed" : ""} ${impact?.target === key ? "hit" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
       })}</div></article>)}</div>
       <div className="battle-message"><span className={myTurn ? "pulse" : ""} /><b>{game.status === "finished" ? "게임 끝" : myTurn ? "내 차례" : `${actor.nickname} 차례`}</b><small>{message}</small></div>
       <article className={`my-board ${myTurn ? "my-turn" : ""}`}><header><div><p className="eyebrow">YOU</p><h2>{me.nickname}</h2></div><button disabled={camera.status === "loading"} className={camera.status === "running" ? "camera-toggle live" : "camera-toggle"} onClick={camera.start}>{camera.status === "loading" ? "준비 중…" : camera.status === "running" ? "● 타격 모드 ON" : "◉ 카메라 켜기"}</button></header><div className="my-content"><div className="my-hand-select"><label>내 손을 끌어서 상대 손에 놓으세요</label><div className="game-hands">{me.hands.map((value, hand) => {
-        const key = targetKey(me.id, hand); return <button key={hand} data-player-hand={key} onPointerDown={(event) => startManualDrag(event, hand as 0 | 1)} disabled={!myTurn || value === 0} className={`game-hand draggable ${manualDrag?.sourceHand === hand ? "drag-source" : ""} ${value === 0 ? "dead" : ""} ${impact?.target === key ? "hit" : ""} ${impact?.sourceHand === hand ? "striking" : ""}`}><span>{fingerEmoji(value)}</span><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
+        const key = targetKey(me.id, hand); return <button key={hand} data-player-hand={key} onPointerDown={(event) => startManualDrag(event, hand as 0 | 1)} disabled={!myTurn || value === 0} className={`game-hand draggable ${manualDrag?.sourceHand === hand ? "drag-source" : ""} ${value === 0 ? "dead" : ""} ${impact?.target === key ? "hit" : ""} ${impact?.sourceHand === hand ? "striking" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
       })}</div></div><div className="split-panel"><label>손가락 분열</label><div>{splitOptions.length ? splitOptions.map((split) => <button key={split.join("-")} disabled={!myTurn} onClick={() => act({ type: "split", hands: split })}>{split[0]} · {split[1]}</button>) : <small>가능한 조합이 없어요</small>}</div><p>양손을 화면 아래에서 새 숫자로 0.8초 유지해도 됩니다.</p></div></div>
-        {camera.status === "running" && <div className="strike-guide"><span><b>1</b>숫자 맞추기</span><i>→</i><span><b>2</b>아래로 장전</span><i>→</i><span><b>3</b>위로 강타!</span></div>}
+        {camera.status === "running" && <div className="strike-guide"><span><b>1</b>숫자 맞추기</span><i>→</i><span><b>2</b>아래에 한 번</span><i>→</i><span><b>3</b>상대 손 가까이</span></div>}
       </article>
       {camera.hands.map((hand, index) => <VirtualHand key={`${hand.hand}-${index}`} hand={hand} />)}
-      {manualDrag && <div className="dragging-hand" style={{ left: manualDrag.x, top: manualDrag.y }} aria-hidden="true"><i /><span>{fingerEmoji(me.hands[manualDrag.sourceHand])}</span><b>{me.hands[manualDrag.sourceHand]}</b></div>}
-      {Object.entries(remotePoses).map(([id, pose]) => <div key={id} className="remote-gesture" style={{ left: `${pose.x * 100}%`, top: `${pose.y * 100}%` }}>{fingerEmoji(pose.fingers)}</div>)}
+      {manualDrag && <div className="dragging-hand" style={{ left: manualDrag.x, top: manualDrag.y }} aria-hidden="true"><i /><FingerIcon value={me.hands[manualDrag.sourceHand]} /><b>{me.hands[manualDrag.sourceHand]}</b></div>}
+      {Object.entries(remotePoses).map(([id, pose]) => <div key={id} className="remote-gesture" style={{ left: `${pose.x * 100}%`, top: `${pose.y * 100}%` }}><FingerIcon value={pose.fingers} /></div>)}
       {impact && <div className="impact-burst" style={{ left: `${impact.x}%`, top: `${impact.y}%` }}><div className="shockwave" /><b>+{impact.power} HIT!</b>{Array.from({ length: 10 }, (_, index) => <i key={index} style={{ "--angle": `${index * 36}deg`, "--distance": `${42 + (index % 3) * 13}px` } as CSSProperties} />)}</div>}
       {camera.status !== "idle" && <div className={`tracking-badge ${camera.status}`}><i />{camera.status === "running" ? "손 인식 중 · 영상 비공개" : camera.status === "loading" ? "손 인식 준비 중" : camera.status === "denied" ? "카메라 권한 필요" : "카메라 연결 실패"}</div>}
     </div>
@@ -271,4 +272,3 @@ export function GamePage() {
 }
 
 const isDead = (hands: [number, number]) => hands[0] === 0 && hands[1] === 0;
-const fingerEmoji = (value: number) => ["✊", "☝️", "✌️", "🤟", "🖖"][value] || "🖐️";

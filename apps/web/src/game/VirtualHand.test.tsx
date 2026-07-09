@@ -11,16 +11,17 @@ const landmarks = Array.from({ length: 21 }, (_, index) => ({
   visibility: 1
 })) as NormalizedLandmark[];
 
-const hand: TrackedHand = { hand: 0, x: .5, y: .62, fingers: 2, vx: 0, vy: 0, speed: 0, landmarks };
+const hand: TrackedHand = { hand: 0, x: .5, y: .62, fingers: 3, vx: 0, vy: 0, speed: 0, landmarks };
 
 describe("virtual hand", () => {
-  it("renders a palm and all five filled fingers", () => {
+  it("renders a finger token without landmark silhouette details", () => {
     const { container } = render(<VirtualHand hand={hand} />);
-    expect(container.querySelectorAll(".hand-palm")).toHaveLength(1);
-    expect(container.querySelectorAll(".finger-fill")).toHaveLength(5);
-    expect(container.querySelectorAll(".finger-tip")).toHaveLength(5);
-    expect(container.querySelectorAll(".glove-cuff")).toHaveLength(1);
-    expect(container.querySelectorAll(".glove-face")).toHaveLength(1);
+    expect(container.querySelectorAll(".finger-icon-3")).toHaveLength(1);
+    expect(container.querySelectorAll(".hand-palm")).toHaveLength(0);
+    expect(container.querySelectorAll(".finger-fill")).toHaveLength(0);
+    expect(container.querySelectorAll(".finger-tip")).toHaveLength(0);
+    expect(container.querySelectorAll(".glove-cuff")).toHaveLength(0);
+    expect(container.querySelectorAll(".glove-face")).toHaveLength(0);
   });
 
   it("uses the calibrated palm position", () => {

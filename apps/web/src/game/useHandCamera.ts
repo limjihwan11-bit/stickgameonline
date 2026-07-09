@@ -3,6 +3,9 @@ import type { HandLandmarker, NormalizedLandmark } from "@mediapipe/tasks-vision
 
 export interface TrackedHand { hand: 0|1; x: number; y: number; fingers: number; vx: number; vy: number; speed: number; landmarks: NormalizedLandmark[] }
 export type CameraStatus = "idle" | "loading" | "running" | "denied" | "error";
+export const CAMERA_STRIKE_MIN_SPEED = .16;
+export const CAMERA_STRIKE_UPWARD_VY = -.04;
+export const CAMERA_STRIKE_MAX_DRIFT_VY = .18;
 
 export function countFingers(points: NormalizedLandmark[], handedness: string): number {
   if (points.length < 21) return 0;
@@ -25,7 +28,7 @@ export function calculateMotion(previous: {x:number;y:number;time:number}|undefi
 }
 
 export function isUpwardStrike(motion: Pick<TrackedHand, "speed" | "vy">, armed: boolean) {
-  return armed && motion.speed > .72 && motion.vy < -.28;
+  return armed && (motion.vy < CAMERA_STRIKE_UPWARD_VY || (motion.speed > CAMERA_STRIKE_MIN_SPEED && motion.vy < CAMERA_STRIKE_MAX_DRIFT_VY));
 }
 
 export function useHandCamera() {

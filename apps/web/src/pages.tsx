@@ -7,8 +7,7 @@ import { rules, Segmented } from "./ui";
 export function HomePage() {
   const { nickname, setNickname, connected } = useSession(); const [draft, setDraft] = useState(nickname); const navigate = useNavigate();
   const enter = (path: string) => { if (!draft.trim()) return; setNickname(draft); navigate(path); };
-  return <div className="home-page">
-    <section className="hero"><p className="eyebrow">CHOPSTICKS ONLINE</p><h1>손가락 준비됐지?<br/><em>한 판 가자!</em></h1><p>카메라로 하거나, 손을 끌어서 바로 시작하세요.</p></section>
+  return <div className="home-page home-page-simple">
     <section className="entry-panel">
       <label className="nickname-field"><span>게스트 닉네임</span><input value={draft} maxLength={12} placeholder="이름을 입력하세요" onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enter("/queue?players=2&rule=classic")} /></label>
       <div className="connection"><i className={connected ? "online" : ""}/>{connected ? "매칭 서버 연결됨" : "서버 연결 중…"}</div>

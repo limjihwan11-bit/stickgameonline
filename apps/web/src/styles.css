@@ -111,8 +111,8 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #315f
 .camera-source{position:fixed;left:-20px;bottom:-20px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none}.camera-source video,.camera-source canvas{display:block;width:1px;height:1px}
 .tracking-badge{position:fixed;right:18px;bottom:18px;z-index:50;display:flex;align-items:center;gap:7px;padding:9px 13px;border:2px solid #769b56;border-radius:99px;color:#fff;background:#3f7d4a;box-shadow:0 6px 0 #285d38;font-size:.72rem}.tracking-badge i{width:8px;height:8px;border-radius:50%;background:#f1d04e;box-shadow:0 0 0 4px rgba(241,208,78,.2)}.tracking-badge.loading{color:#284d32;border-color:#d1af37;background:#fff1a8;box-shadow:0 6px 0 #c5a32a}.tracking-badge.denied,.tracking-badge.error{color:#fff;border-color:#806816;background:#9a7a18;box-shadow:0 6px 0 #70580d}
 
-/* Landmark-driven hand silhouette. */
-.virtual-hand{position:absolute;z-index:18;width:138px;height:170px;pointer-events:none;transform:translate(-50%,-50%);filter:drop-shadow(0 10px 8px rgba(73,57,39,.22));transition:filter .08s;will-change:left,top,transform}.virtual-hand svg{width:100%;height:100%;overflow:visible}.hand-palm{fill:#efc39f;stroke:#a97052;stroke-width:3;stroke-linejoin:round}.finger-outline,.finger-fill{fill:none;stroke-linecap:round;stroke-linejoin:round}.finger-outline{stroke:#a97052;stroke-width:14}.finger-fill{stroke:#efc39f;stroke-width:10}.finger-tip{fill:#efc39f;stroke:#a97052;stroke-width:2}.virtual-hand>b{position:absolute;right:2px;top:5px;width:27px;height:27px;display:grid;place-items:center;border:2px solid #fffdf4;border-radius:50%;color:#fff;background:#3f7d4a;font:.78rem Jua}.virtual-hand>small{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);padding:3px 8px;border-radius:99px;color:#284d32;background:#f1d04e;font:.54rem Jua;letter-spacing:.08em}.virtual-hand.ready{filter:drop-shadow(0 0 10px rgba(226,189,63,.75)) drop-shadow(0 10px 8px rgba(73,57,39,.2))}.virtual-hand.striking{animation:virtual-hand-strike .16s ease-out}.remote-gesture{filter:grayscale(.2) drop-shadow(0 5px 6px rgba(47,83,43,.2))}
+/* Camera hand token. */
+.virtual-hand{position:absolute;z-index:18;width:138px;height:170px;pointer-events:none;transform:translate(-50%,-50%);filter:drop-shadow(0 10px 8px rgba(73,57,39,.22));transition:filter .08s;will-change:left,top,transform}.virtual-hand>b{position:absolute;right:2px;top:5px;width:27px;height:27px;display:grid;place-items:center;border:2px solid #fffdf4;border-radius:50%;color:#fff;background:#3f7d4a;font:.78rem Jua}.virtual-hand>small{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);padding:3px 8px;border-radius:99px;color:#284d32;background:#f1d04e;font:.54rem Jua;letter-spacing:.08em}.virtual-hand.ready{filter:drop-shadow(0 0 10px rgba(226,189,63,.75)) drop-shadow(0 10px 8px rgba(73,57,39,.2))}.virtual-hand.striking{animation:virtual-hand-strike .16s ease-out}.remote-gesture{filter:grayscale(.2) drop-shadow(0 5px 6px rgba(47,83,43,.2))}
 @keyframes virtual-hand-strike{0%{transform:translate(-50%,-40%) scale(.92)}100%{transform:translate(-50%,-60%) scale(1.12)}}
 @media(max-width:850px){.virtual-hand{width:105px;height:135px}.tracking-badge{right:9px;bottom:9px}}
 @media(prefers-reduced-motion:reduce){.virtual-hand.striking{animation-duration:.01ms!important}}
@@ -142,12 +142,8 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #315f
   .game-stage .strike-guide{width:min(700px,100%);margin-left:auto;margin-right:auto}
 }
 
-/* Friendly camera glove */
+/* Friendly camera token */
 .virtual-hand{filter:drop-shadow(0 8px 0 rgba(46,91,55,.2)) drop-shadow(0 12px 8px rgba(54,75,42,.16))}
-.glove-cuff{fill:#4f874d;stroke:#285d38;stroke-width:3}
-.glove-palm-base,.hand-palm{fill:#f4d35e;stroke:#315f3b;stroke-width:3;stroke-linejoin:round}
-.finger-outline{stroke:#315f3b;stroke-width:16}.finger-fill{stroke:#f4d35e;stroke-width:11}.finger-tip{fill:#f4d35e;stroke:#315f3b;stroke-width:2.5}
-.glove-face{fill:#315f3b}.glove-face path{fill:none;stroke:#315f3b;stroke-width:2.5;stroke-linecap:round}
 .virtual-hand>b{color:#244d33;border-color:#fffdf4;background:#f0c841;box-shadow:0 3px 0 #9d7d17}
 .virtual-hand.ready{filter:drop-shadow(0 0 9px rgba(240,200,65,.8)) drop-shadow(0 8px 0 rgba(46,91,55,.2))}.virtual-hand.striking{filter:drop-shadow(0 0 12px rgba(240,200,65,.9)) drop-shadow(0 9px 0 rgba(46,91,55,.22))}
 
@@ -168,3 +164,16 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #315f
   .game-stage .my-hand-select .game-hand span,.board-2 .seat-north .game-hand span{font-size:4.25rem}
 }
 @media(max-width:520px){.game-hand{flex-basis:94px;width:94px;height:94px;min-height:94px}.game-hand span{font-size:2.85rem}.dragging-hand{width:82px;height:82px}.dragging-hand>span{font-size:3.6rem}}
+
+.home-page.home-page-simple{grid-template-columns:minmax(320px,560px);justify-content:center}
+.home-page-simple .entry-panel{width:100%}
+
+/* Platform emoji hand tokens. */
+.finger-icon{display:block;width:1em;height:1em;line-height:1;text-align:center;transform:translateY(-2px);transform-origin:center;filter:drop-shadow(0 3px 0 rgba(49,95,59,.12))}
+.game-hand .finger-icon{font-size:3.55rem}
+.virtual-hand{display:grid;place-items:center;width:126px;height:158px}
+.virtual-hand>.finger-icon{font-size:6.1rem}
+.dragging-hand>.finger-icon{font-size:4.35rem}
+.remote-gesture .finger-icon{font-size:2.75rem}
+@media(min-width:851px){.game-stage .my-hand-select .game-hand .finger-icon,.board-2 .seat-north .game-hand .finger-icon{font-size:4.45rem}.virtual-hand>.finger-icon{font-size:6.45rem}}
+@media(max-width:520px){.game-hand .finger-icon{font-size:3rem}.dragging-hand>.finger-icon{font-size:3.75rem}.virtual-hand{width:104px;height:136px}.virtual-hand>.finger-icon{font-size:5.15rem}}
