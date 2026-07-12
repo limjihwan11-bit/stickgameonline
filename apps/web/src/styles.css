@@ -177,3 +177,18 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #315f
 .remote-gesture .finger-icon{font-size:2.75rem}
 @media(min-width:851px){.game-stage .my-hand-select .game-hand .finger-icon,.board-2 .seat-north .game-hand .finger-icon{font-size:4.45rem}.virtual-hand>.finger-icon{font-size:6.45rem}}
 @media(max-width:520px){.game-hand .finger-icon{font-size:3rem}.dragging-hand>.finger-icon{font-size:3.75rem}.virtual-hand{width:104px;height:136px}.virtual-hand>.finger-icon{font-size:5.15rem}}
+
+.battle-message .item-message{margin-top:5px;padding:4px 9px;border:1px solid #d3b335;border-radius:999px;background:#fff1a8;color:#315f3b;font-family:Jua,sans-serif}
+
+.tutorial-entry{display:grid;gap:10px;margin:0 0 18px;padding:15px;border:2px solid #d3b335;border-radius:18px;background:#fff1a8;box-shadow:0 7px 0 rgba(49,95,59,.12)}
+.tutorial-entry div{display:grid;gap:3px}.tutorial-entry b{font:1.05rem Jua;color:#244d33}.tutorial-entry small{color:#5f6f57;font-size:.76rem}.tutorial-entry .primary,.tutorial-entry .secondary{width:100%;padding:10px 14px}
+.tutorial-dim{position:absolute;inset:0;z-index:70;background:rgba(54,59,55,.66);backdrop-filter:grayscale(1);pointer-events:auto}
+.tutorial-focus{position:relative!important;z-index:85!important;opacity:1!important;filter:none!important;transform:translateY(-2px) scale(1.04);box-shadow:0 0 0 6px rgba(255,241,168,.95),0 0 0 12px rgba(49,95,59,.35),0 14px 28px rgba(0,0,0,.18)!important}
+.tutorial-bubble{position:absolute;z-index:95;width:min(315px,calc(100% - 28px));padding:16px 17px;border:2px solid #315f3b;border-radius:20px;background:#fffdf7;color:#20372f;box-shadow:0 10px 0 rgba(49,95,59,.22),0 22px 45px rgba(0,0,0,.22);pointer-events:auto}
+.tutorial-bubble:after{content:"";position:absolute;width:18px;height:18px;border:2px solid #315f3b;border-left:0;border-top:0;background:#fffdf7;transform:rotate(45deg)}
+.tutorial-bubble small{color:#8a6f0b;font:.7rem Jua;letter-spacing:.12em}.tutorial-bubble b{display:block;margin:4px 0 5px;font:1.25rem Jua}.tutorial-bubble p{margin:0;color:#53645c;font-size:.86rem;line-height:1.45}.tutorial-bubble div{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.tutorial-bubble button{padding:8px 12px}
+.bubble-north{left:50%;top:132px;transform:translateX(-50%)}.bubble-north:after{left:50%;bottom:-11px;transform:translateX(-50%) rotate(45deg)}
+.bubble-south{left:50%;bottom:132px;transform:translateX(-50%)}.bubble-south:after{left:50%;top:-11px;transform:translateX(-50%) rotate(225deg)}
+.bubble-center{left:50%;top:50%;transform:translate(-50%,-50%)}.bubble-center:after{display:none}
+.bubble-east{right:22px;bottom:170px}.bubble-east:after{right:34px;bottom:-11px;transform:rotate(45deg)}
+@media(max-width:650px){.tutorial-bubble{left:14px!important;right:auto!important;top:auto!important;bottom:24px!important;transform:none!important}.tutorial-bubble:after{display:none}.tutorial-entry{padding:13px}}

@@ -1,9 +1,26 @@
 import { z } from "zod";
 
-export const ruleIds = ["classic", "no-repeat", "no-opening-split", "rollover"] as const;
+export const ruleIds = ["classic", "no-repeat", "no-opening-split", "rollover", "items"] as const;
 export type RuleId = typeof ruleIds[number];
+export const itemIds = ["lightning", "bomb", "jelly", "wind", "thief"] as const;
+export type ItemId = typeof itemIds[number];
 export type Difficulty = "easy" | "medium" | "hard";
 export type Hands = [number, number];
+
+export function normalizeRuleSet(input?: RuleId | readonly RuleId[] | null): RuleId[] {
+  const raw = (Array.isArray(input) ? input : input ? [input] : ["classic"]) as readonly string[];
+  const selected = ruleIds.filter((rule) => raw.includes(rule));
+  return selected.length ? selected : ["classic"];
+}
+
+export interface ItemEvent {
+  id: ItemId;
+  label: string;
+  message: string;
+  actorId: string;
+  affectedPlayerIds: string[];
+  turnNumber: number;
+}
 
 export interface GamePlayer {
   id: string;
@@ -16,6 +33,7 @@ export interface GamePlayer {
 export interface GameState {
   id: string;
   rule: RuleId;
+  rules?: RuleId[];
   players: GamePlayer[];
   turnIndex: number;
   status: "playing" | "finished";
@@ -24,6 +42,7 @@ export interface GameState {
   turnNumber: number;
   firstTurnCompleted: Record<string, boolean>;
   boardHistory: string[];
+  lastItemEvent?: ItemEvent;
 }
 
 export type AttackAction = { type: "attack"; sourceHand: 0 | 1; targetPlayerId: string; targetHand: 0 | 1; clientActionId?: string };
@@ -31,11 +50,19 @@ export type SplitAction = { type: "split"; hands: Hands; clientActionId?: string
 export type PassAction = { type: "pass"; reason: "timeout" | "disconnect"; clientActionId?: string };
 export type GameAction = AttackAction | SplitAction | PassAction;
 
-export interface RoomSettings { playerCount: 2 | 3 | 4; rule: RuleId }
+export interface RoomSettings { playerCount: 2 | 3 | 4; rule: RuleId; rules?: RuleId[] }
 export interface LobbyPlayer { id: string; nickname: string; ready: boolean; connected: boolean }
 export interface RoomState { code: string; hostId: string; settings: RoomSettings; players: LobbyPlayer[]; status: "waiting" | "playing"; gameId?: string }
 
-export const roomSettingsSchema = z.object({ playerCount: z.union([z.literal(2), z.literal(3), z.literal(4)]), rule: z.enum(ruleIds) });
+const playerCountSchema = z.union([z.literal(2), z.literal(3), z.literal(4)]);
+export const roomSettingsSchema = z.object({
+  playerCount: playerCountSchema,
+  rule: z.enum(ruleIds).optional(),
+  rules: z.array(z.enum(ruleIds)).optional()
+}).transform((settings): RoomSettings => {
+  const rules = normalizeRuleSet(settings.rules ?? settings.rule);
+  return { playerCount: settings.playerCount, rule: rules[0], rules };
+});
 export const attackActionSchema = z.object({ type: z.literal("attack"), sourceHand: z.union([z.literal(0), z.literal(1)]), targetPlayerId: z.string().min(1), targetHand: z.union([z.literal(0), z.literal(1)]), clientActionId: z.string().optional() });
 export const splitActionSchema = z.object({ type: z.literal("split"), hands: z.tuple([z.number().int().min(0).max(4), z.number().int().min(0).max(4)]), clientActionId: z.string().optional() });
 export const gameActionSchema = z.discriminatedUnion("type", [attackActionSchema, splitActionSchema]);

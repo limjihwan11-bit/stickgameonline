@@ -14,7 +14,8 @@ export const rules = [
   { id: "classic", label: "클래식", desc: "5 이상이면 해당 손 아웃" },
   { id: "no-repeat", label: "반복 금지", desc: "한 수 전 상태 재현 금지" },
   { id: "no-opening-split", label: "초반 분열 금지", desc: "첫 턴에는 분열 불가" },
-  { id: "rollover", label: "5 초과 반복", desc: "5를 뺀 나머지로 계속" }
+  { id: "rollover", label: "5 초과 반복", desc: "5를 뺀 나머지로 계속" },
+  { id: "items", label: "아이템전", desc: "매 턴 랜덤 아이템이 터지는 난장판 모드" }
 ] as const;
 
 export function Segmented<T extends string | number>({ values, value, onChange }: { values: Array<{ value: T; label: string }>; value: T; onChange: (value: T) => void }) {

@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { Server, type Socket } from "socket.io";
 import {
-  applyAction, boardSignature, createGame, gameActionSchema, isEliminated, roomSettingsSchema,
+  applyAction, boardSignature, createGame, gameActionSchema, isEliminated, normalizeRuleSet, roomSettingsSchema,
   type ClientToServerEvents, type GameState, type RoomSettings, type RoomState, type ServerToClientEvents
 } from "@stickgame/shared";
 
@@ -22,7 +22,7 @@ export function createStickServer() {
   const queues = new Map<string, string[]>();
   const usedActions = new Map<string, Set<string>>();
 
-  const queueKey = (settings: RoomSettings) => `${settings.playerCount}:${settings.rule}`;
+  const queueKey = (settings: RoomSettings) => `${settings.playerCount}:${normalizeRuleSet(settings.rules ?? settings.rule).join("+")}`;
   const getSocket = (playerId: string) => { const sid = sessions.get(playerId)?.socketId; return sid ? io.sockets.sockets.get(sid) as GameSocket | undefined : undefined; };
   const emitRoom = (room: RoomState) => room.players.forEach((p) => getSocket(p.id)?.emit("room:state", room));
   const emitGame = (game: GameState) => io.to(`game:${game.id}`).emit("game:state", game);
@@ -37,7 +37,7 @@ export function createStickServer() {
 
   function startGame(playerIds: string[], settings: RoomSettings): GameState {
     const id = randomUUID();
-    const game = createGame(id, settings.rule, playerIds.map((pid) => ({ id: pid, nickname: sessions.get(pid)?.nickname || "플레이어" })));
+    const game = createGame(id, settings.rules ?? settings.rule, playerIds.map((pid) => ({ id: pid, nickname: sessions.get(pid)?.nickname || "플레이어" })));
     games.set(id, game); usedActions.set(id, new Set());
     playerIds.forEach((pid) => {
       const session = sessions.get(pid)!; session.gameId = id; session.roomCode = undefined;
@@ -87,9 +87,9 @@ export function createStickServer() {
       if (!list.includes(playerId)) list.push(playerId); queues.set(key, list);
       list.forEach((id) => getSocket(id)?.emit("queue:state", { waiting: true, count: list.length }));
       ack({ ok: true });
-      if (list.length >= settings.playerCount) {
-        const matched = list.splice(0, settings.playerCount); queues.set(key, list);
-        startGame(matched, settings);
+      if (list.length >= parsed.data.playerCount) {
+        const matched = list.splice(0, parsed.data.playerCount); queues.set(key, list);
+        startGame(matched, parsed.data);
       }
     });
     socket.on("queue:leave", () => { const id = socket.data.playerId; if (id) { removeFromQueues(id); socket.emit("queue:state", { waiting: false, count: 0 }); } });

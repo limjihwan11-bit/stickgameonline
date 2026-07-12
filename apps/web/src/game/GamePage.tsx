@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { applyAction, chooseAIAction, createGame, legalSplits, type Difficulty, type GameAction, type GameState, type RuleId } from "@stickgame/shared";
+import { applyAction, chooseAIAction, createGame, legalSplits, normalizeRuleSet, type Difficulty, type GameAction, type GameState, type RuleId } from "@stickgame/shared";
 import { useSession } from "../session";
 import { rules } from "../ui";
 import { isUpwardStrike, useHandCamera, type TrackedHand } from "./useHandCamera";
@@ -12,6 +12,8 @@ import { FingerIcon } from "./FingerIcon";
 const names = ["느긋한 두부", "매콤한 만두", "단단한 묵"];
 const makeId = () => crypto.randomUUID();
 const targetKey = (playerId: string, hand: number) => `${playerId}-${hand}`;
+const queryRules = (value: string | null, fallback: string | null): RuleId[] =>
+  normalizeRuleSet((value?.split(",") ?? [fallback || "classic"]).filter((rule): rule is RuleId => rules.some((item) => item.id === rule)));
 
 interface ImpactFx {
   id: string;
@@ -27,6 +29,16 @@ interface ManualDrag {
   x: number;
   y: number;
 }
+
+type TutorialStep = "drag" | "target" | "wait" | "split" | "camera" | "done";
+
+const tutorialCopy: Record<Exclude<TutorialStep, "done">, { title: string; body: string; position: string; action?: string }> = {
+  drag: { title: "내 손을 잡아봐", body: "아래에 있는 내 손 하나를 누른 채로 끌면 공격 준비가 돼.", position: "bubble-south" },
+  target: { title: "상대 손에 놓기", body: "회색으로 덮인 곳은 신경 쓰지 말고, 밝게 보이는 상대 손 위에 놓아봐.", position: "bubble-north" },
+  wait: { title: "컴퓨터 차례", body: "좋아, 공격 성공! 이제 컴퓨터가 한 번 둘 때까지 잠깐 기다리면 돼.", position: "bubble-center" },
+  split: { title: "분열도 있어", body: "양손 합은 그대로 두고 다른 조합으로 나누는 기능이야. 지금은 알아두기만 해도 돼.", position: "bubble-east", action: "다음" },
+  camera: { title: "카메라도 가능", body: "나중엔 카메라를 켜고 손가락 숫자를 맞춘 뒤 상대 손 가까이 올려서 공격할 수 있어.", position: "bubble-east", action: "끝내기" }
+};
 
 function playImpactFeedback(power: number) {
   try {
@@ -53,9 +65,11 @@ export function GamePage() {
   const { nickname, playerId, socket } = useSession();
   const local = mode === "ai";
   const difficulty = (params.get("difficulty") || "medium") as Difficulty;
+  const tutorialMode = local && params.get("tutorial") === "1";
+  const selectedRules = queryRules(params.get("rules"), params.get("rule"));
   const [game, setGame] = useState<GameState | null>(() => local ? createGame(
     "local",
-    (params.get("rule") || "classic") as RuleId,
+    selectedRules,
     Array.from({ length: Number(params.get("players") || 2) }, (_, i) => i === 0
       ? { id: playerId, nickname }
       : { id: `ai-${i}`, nickname: names[i - 1], isAI: true })
@@ -65,6 +79,7 @@ export function GamePage() {
   const [aimedTarget, setAimedTarget] = useState("");
   const [impact, setImpact] = useState<ImpactFx | null>(null);
   const [manualDrag, setManualDrag] = useState<ManualDrag | null>(null);
+  const [tutorialStep, setTutorialStep] = useState<TutorialStep>(() => tutorialMode ? "drag" : "done");
   const [remotePoses, setRemotePoses] = useState<Record<string, { x: number; y: number; fingers: number }>>({});
   const stageRef = useRef<HTMLDivElement>(null);
   const splitGesture = useRef<{ key: string; since: number }>({ key: "", since: 0 });
@@ -74,6 +89,12 @@ export function GamePage() {
   const previousGame = useRef<GameState | null>(null);
   const manualDragRef = useRef<ManualDrag | null>(null);
   const camera = useHandCamera();
+  const tutorialActive = tutorialMode && tutorialStep !== "done";
+  const finishTutorial = useCallback(() => {
+    localStorage.setItem("stick-tutorial-done", "true");
+    setTutorialStep("done");
+    setMessage("튜토리얼 끝! 이제 자유롭게 이어서 해봐요.");
+  }, []);
 
   const showImpact = useCallback((player: string, hand: 0 | 1, power: number, sourceHand?: 0 | 1) => {
     const stage = stageRef.current;
@@ -143,7 +164,8 @@ export function GamePage() {
     event.preventDefault();
     const next = { sourceHand, x: event.clientX, y: event.clientY };
     manualDragRef.current = next; setManualDrag(next); setMessage("상대의 왼손이나 오른손 위에 놓으세요.");
-  }, [game, playerId]);
+    if (tutorialMode && tutorialStep === "drag") setTutorialStep("target");
+  }, [game, playerId, tutorialMode, tutorialStep]);
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -155,13 +177,16 @@ export function GamePage() {
     const finish = (event: PointerEvent) => {
       const current = manualDragRef.current; if (!current) return;
       const target = findManualTarget(event.clientX, event.clientY);
-      if (target) act({ type: "attack", sourceHand: current.sourceHand, targetPlayerId: target.playerId, targetHand: target.hand });
+      if (target) {
+        act({ type: "attack", sourceHand: current.sourceHand, targetPlayerId: target.playerId, targetHand: target.hand });
+        if (tutorialMode && tutorialStep === "target") setTutorialStep("wait");
+      }
       else setMessage("상대 손 위에 놓지 않아 공격을 취소했어요.");
       manualDragRef.current = null; setManualDrag(null); setAimedTarget("");
     };
     window.addEventListener("pointermove", move, { passive: true }); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", finish);
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", finish); };
-  }, [act, findManualTarget]);
+  }, [act, findManualTarget, tutorialMode, tutorialStep]);
 
   useEffect(() => {
     if (!local || !game || game.status !== "playing") return;
@@ -172,6 +197,11 @@ export function GamePage() {
     }, 650);
     return () => clearTimeout(timer);
   }, [difficulty, game, local]);
+
+  useEffect(() => {
+    if (!tutorialMode || tutorialStep !== "wait" || !game) return;
+    if (game.turnNumber >= 2 && game.players[game.turnIndex]?.id === playerId) setTutorialStep("split");
+  }, [game, playerId, tutorialMode, tutorialStep]);
 
   useEffect(() => {
     const previous = previousGame.current;
@@ -246,18 +276,19 @@ export function GamePage() {
   const actor = game.players[game.turnIndex]; const myTurn = actor.id === playerId;
   const opponents = game.players.filter((player) => player.id !== playerId); const splitOptions = legalSplits(me.hands);
   const opponentSeats = getOpponentSeats(game.players.length);
-  const ruleLabel = rules.find((rule) => rule.id === game.rule)?.label;
+  const ruleLabel = normalizeRuleSet(game.rules ?? game.rule).map((id) => rules.find((rule) => rule.id === id)?.label ?? id).join(" + ");
+  const itemEvent = game.lastItemEvent;
   return <section className="game-page">
     <div className="game-toolbar"><button className="back-button" onClick={() => navigate("/")}>← 나가기</button><div><b>{local ? `AI ${difficulty === "easy" ? "하" : difficulty === "medium" ? "중" : "상"}` : "온라인 대전"}</b><span>{ruleLabel} · {game.players.length}인전</span></div><div className={myTurn ? "turn-clock mine" : "turn-clock"}><small>{game.status === "finished" ? "종료" : myTurn ? "내 차례" : `${actor.nickname} 차례`}</small><b>{seconds}</b></div></div>
     <div className={`game-stage board-${game.players.length} ${impact ? "impacting" : ""}`} ref={stageRef}>
       <div className="action-lines" />
       <div className="opponents-grid">{opponents.map((player, index) => <article className={`opponent-card seat-${opponentSeats[index]} ${game.status === "playing" && actor.id === player.id ? "active-player" : ""}`} key={player.id}><header><span className="avatar">{player.nickname[0]}</span><div><b>{player.nickname}</b><small>{player.connected ? isDead(player.hands) ? "탈락" : "플레이 중" : "재접속 대기"}</small></div><em>#{index + 2}</em></header><div className="game-hands">{player.hands.map((value, hand) => {
-        const key = targetKey(player.id, hand); return <button key={hand} disabled={!myTurn || value === 0 || me.hands.every((number) => number === 0)} data-opponent-target data-player-hand={key} data-target-player={player.id} data-target-hand={hand} className={`game-hand ${value === 0 ? "dead" : ""} ${aimedTarget === key ? "aimed" : ""} ${impact?.target === key ? "hit" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
+        const key = targetKey(player.id, hand); const tutorialTarget = tutorialActive && tutorialStep === "target" && index === 0 && hand === 0; return <button key={hand} disabled={!myTurn || value === 0 || me.hands.every((number) => number === 0)} data-opponent-target data-player-hand={key} data-target-player={player.id} data-target-hand={hand} className={`game-hand ${value === 0 ? "dead" : ""} ${aimedTarget === key ? "aimed" : ""} ${impact?.target === key ? "hit" : ""} ${tutorialTarget ? "tutorial-focus" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
       })}</div></article>)}</div>
-      <div className="battle-message"><span className={myTurn ? "pulse" : ""} /><b>{game.status === "finished" ? "게임 끝" : myTurn ? "내 차례" : `${actor.nickname} 차례`}</b><small>{message}</small></div>
-      <article className={`my-board ${myTurn ? "my-turn" : ""}`}><header><div><p className="eyebrow">YOU</p><h2>{me.nickname}</h2></div><button disabled={camera.status === "loading"} className={camera.status === "running" ? "camera-toggle live" : "camera-toggle"} onClick={camera.start}>{camera.status === "loading" ? "준비 중…" : camera.status === "running" ? "● 타격 모드 ON" : "◉ 카메라 켜기"}</button></header><div className="my-content"><div className="my-hand-select"><label>내 손을 끌어서 상대 손에 놓으세요</label><div className="game-hands">{me.hands.map((value, hand) => {
-        const key = targetKey(me.id, hand); return <button key={hand} data-player-hand={key} onPointerDown={(event) => startManualDrag(event, hand as 0 | 1)} disabled={!myTurn || value === 0} className={`game-hand draggable ${manualDrag?.sourceHand === hand ? "drag-source" : ""} ${value === 0 ? "dead" : ""} ${impact?.target === key ? "hit" : ""} ${impact?.sourceHand === hand ? "striking" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
-      })}</div></div><div className="split-panel"><label>손가락 분열</label><div>{splitOptions.length ? splitOptions.map((split) => <button key={split.join("-")} disabled={!myTurn} onClick={() => act({ type: "split", hands: split })}>{split[0]} · {split[1]}</button>) : <small>가능한 조합이 없어요</small>}</div><p>양손을 화면 아래에서 새 숫자로 0.8초 유지해도 됩니다.</p></div></div>
+      <div className={`battle-message ${tutorialActive && tutorialStep === "wait" ? "tutorial-focus" : ""}`}><span className={myTurn ? "pulse" : ""} /><b>{game.status === "finished" ? "게임 끝" : myTurn ? "내 차례" : `${actor.nickname} 차례`}</b><small>{message}</small>{itemEvent && <small className="item-message">🎲 {itemEvent.label}: {itemEvent.message}</small>}</div>
+      <article className={`my-board ${myTurn ? "my-turn" : ""}`}><header><div><p className="eyebrow">YOU</p><h2>{me.nickname}</h2></div><button disabled={camera.status === "loading"} className={`${camera.status === "running" ? "camera-toggle live" : "camera-toggle"} ${tutorialActive && tutorialStep === "camera" ? "tutorial-focus" : ""}`} onClick={camera.start}>{camera.status === "loading" ? "준비 중…" : camera.status === "running" ? "● 타격 모드 ON" : "◉ 카메라 켜기"}</button></header><div className="my-content"><div className="my-hand-select"><label>내 손을 끌어서 상대 손에 놓으세요</label><div className="game-hands">{me.hands.map((value, hand) => {
+        const key = targetKey(me.id, hand); const tutorialSource = tutorialActive && tutorialStep === "drag" && hand === 0; return <button key={hand} data-player-hand={key} onPointerDown={(event) => startManualDrag(event, hand as 0 | 1)} disabled={!myTurn || value === 0} className={`game-hand draggable ${manualDrag?.sourceHand === hand ? "drag-source" : ""} ${value === 0 ? "dead" : ""} ${impact?.target === key ? "hit" : ""} ${impact?.sourceHand === hand ? "striking" : ""} ${tutorialSource ? "tutorial-focus" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
+      })}</div></div><div className={`split-panel ${tutorialActive && tutorialStep === "split" ? "tutorial-focus" : ""}`}><label>손가락 분열</label><div>{splitOptions.length ? splitOptions.map((split) => <button key={split.join("-")} disabled={!myTurn} onClick={() => act({ type: "split", hands: split })}>{split[0]} · {split[1]}</button>) : <small>가능한 조합이 없어요</small>}</div><p>양손을 화면 아래에서 새 숫자로 0.8초 유지해도 됩니다.</p></div></div>
         {camera.status === "running" && <div className="strike-guide"><span><b>1</b>숫자 맞추기</span><i>→</i><span><b>2</b>아래에 한 번</span><i>→</i><span><b>3</b>상대 손 가까이</span></div>}
       </article>
       {camera.hands.map((hand, index) => <VirtualHand key={`${hand.hand}-${index}`} hand={hand} />)}
@@ -265,6 +296,7 @@ export function GamePage() {
       {Object.entries(remotePoses).map(([id, pose]) => <div key={id} className="remote-gesture" style={{ left: `${pose.x * 100}%`, top: `${pose.y * 100}%` }}><FingerIcon value={pose.fingers} /></div>)}
       {impact && <div className="impact-burst" style={{ left: `${impact.x}%`, top: `${impact.y}%` }}><div className="shockwave" /><b>+{impact.power} HIT!</b>{Array.from({ length: 10 }, (_, index) => <i key={index} style={{ "--angle": `${index * 36}deg`, "--distance": `${42 + (index % 3) * 13}px` } as CSSProperties} />)}</div>}
       {camera.status !== "idle" && <div className={`tracking-badge ${camera.status}`}><i />{camera.status === "running" ? "손 인식 중 · 영상 비공개" : camera.status === "loading" ? "손 인식 준비 중" : camera.status === "denied" ? "카메라 권한 필요" : "카메라 연결 실패"}</div>}
+      {tutorialActive && <TutorialCoach step={tutorialStep} onNext={() => tutorialStep === "split" ? setTutorialStep("camera") : finishTutorial()} onSkip={finishTutorial} />}
     </div>
     <div className="camera-source" aria-hidden="true"><video ref={camera.videoRef} autoPlay muted playsInline /><canvas ref={camera.canvasRef} /></div>
     {game.status === "finished" && <div className="result-banner"><span>{game.winnerId === playerId ? "🏆" : "👏"}</span><h2>{game.winnerId === playerId ? "승리했습니다!" : `${game.players.find((player) => player.id === game.winnerId)?.nickname} 승리`}</h2><p>{game.winnerId === playerId ? "멋진 손놀림이었어요." : "좋은 승부였어요. 다시 도전해 보세요."}</p><button className="primary" onClick={() => navigate(local ? "/setup/ai" : "/")}>{local ? "다시 설정하기" : "홈으로"}</button></div>}
@@ -272,3 +304,20 @@ export function GamePage() {
 }
 
 const isDead = (hands: [number, number]) => hands[0] === 0 && hands[1] === 0;
+
+function TutorialCoach({ step, onNext, onSkip }: { step: TutorialStep; onNext: () => void; onSkip: () => void }) {
+  if (step === "done") return null;
+  const copy = tutorialCopy[step];
+  return <>
+    <div className="tutorial-dim" />
+    <aside className={`tutorial-bubble ${copy.position}`}>
+      <small>튜토리얼</small>
+      <b>{copy.title}</b>
+      <p>{copy.body}</p>
+      <div>
+        <button className="secondary" onClick={onSkip}>그만 보기</button>
+        {copy.action && <button className="primary" onClick={onNext}>{copy.action}</button>}
+      </div>
+    </aside>
+  </>;
+}
