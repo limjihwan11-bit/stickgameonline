@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { SessionProvider } from "./session";
 import { AppShell } from "./ui";
-import { HomePage, SetupPage, QueuePage, FriendlyPage } from "./pages";
+import { AuthPage, FriendlyPage, HomePage, LeaderboardPage, QueuePage, SetupPage } from "./pages";
 import { GamePage } from "./game/GamePage";
 import "./styles.css";
 
@@ -12,6 +12,8 @@ createRoot(document.getElementById("root")!).render(
     <Route path="/" element={<HomePage />} />
     <Route path="/setup/:kind" element={<SetupPage />} />
     <Route path="/queue" element={<QueuePage />} />
+    <Route path="/auth/:mode" element={<AuthPage />} />
+    <Route path="/leaderboard" element={<LeaderboardPage />} />
     <Route path="/friendly" element={<FriendlyPage />} />
     <Route path="/friendly/:code" element={<FriendlyPage />} />
     <Route path="/game/:mode/:gameId?" element={<GamePage />} />

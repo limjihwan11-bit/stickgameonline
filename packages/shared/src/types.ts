@@ -4,6 +4,9 @@ export const ruleIds = ["classic", "no-repeat", "no-opening-split", "rollover", 
 export type RuleId = typeof ruleIds[number];
 export const itemIds = ["lightning", "bomb", "jelly", "wind", "thief"] as const;
 export type ItemId = typeof itemIds[number];
+export const itemMissionIds = ["attack", "split"] as const;
+export type ItemMissionId = typeof itemMissionIds[number];
+export const itemMissionGoals: Record<ItemMissionId, number> = { attack: 5, split: 5 };
 export type Difficulty = "easy" | "medium" | "hard";
 export type Hands = [number, number];
 
@@ -20,6 +23,14 @@ export interface ItemEvent {
   actorId: string;
   affectedPlayerIds: string[];
   turnNumber: number;
+  kind?: "earned" | "used";
+  mission?: ItemMissionId;
+}
+
+export interface PlayerItemState {
+  inventory: ItemId[];
+  missions: Record<ItemMissionId, number>;
+  earnedItems: number;
 }
 
 export interface GamePlayer {
@@ -42,13 +53,39 @@ export interface GameState {
   turnNumber: number;
   firstTurnCompleted: Record<string, boolean>;
   boardHistory: string[];
+  itemState?: Record<string, PlayerItemState>;
   lastItemEvent?: ItemEvent;
+  ranked?: boolean;
+  ratingChanges?: Record<string, RatingChange>;
+}
+
+export interface RatingChange {
+  before: number;
+  after: number;
+  delta: number;
+}
+
+export interface PublicUser {
+  id: string;
+  username: string;
+  nickname: string;
+  elo: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  streak: number;
+  bestStreak: number;
+}
+
+export interface LeaderboardEntry extends PublicUser {
+  rank: number;
 }
 
 export type AttackAction = { type: "attack"; sourceHand: 0 | 1; targetPlayerId: string; targetHand: 0 | 1; clientActionId?: string };
 export type SplitAction = { type: "split"; hands: Hands; clientActionId?: string };
+export type UseItemAction = { type: "use-item"; itemId: ItemId; clientActionId?: string };
 export type PassAction = { type: "pass"; reason: "timeout" | "disconnect"; clientActionId?: string };
-export type GameAction = AttackAction | SplitAction | PassAction;
+export type GameAction = AttackAction | SplitAction | UseItemAction | PassAction;
 
 export interface RoomSettings { playerCount: 2 | 3 | 4; rule: RuleId; rules?: RuleId[] }
 export interface LobbyPlayer { id: string; nickname: string; ready: boolean; connected: boolean }
@@ -65,7 +102,8 @@ export const roomSettingsSchema = z.object({
 });
 export const attackActionSchema = z.object({ type: z.literal("attack"), sourceHand: z.union([z.literal(0), z.literal(1)]), targetPlayerId: z.string().min(1), targetHand: z.union([z.literal(0), z.literal(1)]), clientActionId: z.string().optional() });
 export const splitActionSchema = z.object({ type: z.literal("split"), hands: z.tuple([z.number().int().min(0).max(4), z.number().int().min(0).max(4)]), clientActionId: z.string().optional() });
-export const gameActionSchema = z.discriminatedUnion("type", [attackActionSchema, splitActionSchema]);
+export const useItemActionSchema = z.object({ type: z.literal("use-item"), itemId: z.enum(itemIds), clientActionId: z.string().optional() });
+export const gameActionSchema = z.discriminatedUnion("type", [attackActionSchema, splitActionSchema, useItemActionSchema]);
 
 export interface ClientToServerEvents {
   "session:hello": (payload: { playerId: string; nickname: string }, ack: (result: { ok: boolean; error?: string }) => void) => void;
@@ -73,9 +111,10 @@ export interface ClientToServerEvents {
   "queue:leave": () => void;
   "room:create": (payload: { settings: RoomSettings }, ack: (result: { ok: boolean; code?: string; error?: string }) => void) => void;
   "room:join": (payload: { code: string }, ack: (result: { ok: boolean; code?: string; error?: string }) => void) => void;
+  "room:leave": (ack: (result: { ok: boolean; error?: string }) => void) => void;
   "room:update": (settings: RoomSettings) => void;
   "room:ready": (ready: boolean) => void;
-  "game:action": (action: AttackAction | SplitAction, ack: (result: { ok: boolean; error?: string }) => void) => void;
+  "game:action": (action: AttackAction | SplitAction | UseItemAction, ack: (result: { ok: boolean; error?: string }) => void) => void;
   "game:sync": (ack: (result: { ok: boolean; state?: GameState; error?: string }) => void) => void;
   "game:pose": (pose: { x: number; y: number; fingers: number; hand: 0 | 1 }) => void;
 }

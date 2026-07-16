@@ -6,7 +6,7 @@ describe("rules ui", () => {
     expect(rules).toContainEqual({
       id: "items",
       label: "아이템전",
-      desc: "매 턴 랜덤 아이템이 터지는 난장판 모드"
+      desc: "미션을 깨서 랜덤 아이템을 얻고 원하는 때 사용"
     });
   });
 });

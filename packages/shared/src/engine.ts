@@ -1,4 +1,7 @@
-import { itemIds, normalizeRuleSet, type GameAction, type GameState, type Hands, type ItemId, type RuleId } from "./types.js";
+import {
+  itemIds, itemMissionGoals, normalizeRuleSet,
+  type GameAction, type GameState, type Hands, type ItemId, type ItemMissionId, type PlayerItemState, type RuleId
+} from "./types.js";
 
 export class GameRuleError extends Error {}
 
@@ -11,7 +14,8 @@ export function createGame(id: string, rule: RuleId | readonly RuleId[], players
   const state: GameState = {
     id, rule: rules[0], rules, players: players.map((p) => ({ ...p, hands: [1, 1], connected: true })),
     turnIndex: 0, status: "playing", turnStartedAt: now, turnNumber: 0,
-    firstTurnCompleted: Object.fromEntries(players.map((p) => [p.id, false])), boardHistory: []
+    firstTurnCompleted: Object.fromEntries(players.map((p) => [p.id, false])), boardHistory: [],
+    itemState: rules.includes("items") ? Object.fromEntries(players.map((p) => [p.id, createPlayerItemState()])) : undefined
   };
   state.boardHistory.push(boardSignature(state));
   return state;
@@ -32,9 +36,20 @@ const itemLabels: Record<ItemId, string> = {
 
 const handLabels = ["왼손", "오른손"] as const;
 
+function createPlayerItemState(): PlayerItemState {
+  return { inventory: [], missions: { attack: 0, split: 0 }, earnedItems: 0 };
+}
+
+function ensureItemState(state: GameState, playerId: string): PlayerItemState {
+  state.itemState ??= {};
+  state.itemState[playerId] ??= createPlayerItemState();
+  return state.itemState[playerId];
+}
+
 function actionSeed(action: GameAction): string {
   if (action.type === "attack") return `attack:${action.sourceHand}:${action.targetPlayerId}:${action.targetHand}`;
   if (action.type === "split") return `split:${action.hands[0]},${action.hands[1]}`;
+  if (action.type === "use-item") return `use-item:${action.itemId}`;
   return `pass:${action.reason}`;
 }
 
@@ -87,9 +102,33 @@ function lowerHand(hands: Hands, random: () => number): HandIndex {
   return hands[0] < hands[1] ? 0 : 1;
 }
 
-function applyItemEffect(next: GameState, playerId: string, action: GameAction, turnNumber: number) {
-  const random = createRandom(`${next.id}:${turnNumber}:${actionSeed(action)}`);
+function awardMissionProgress(next: GameState, playerId: string, mission: ItemMissionId, turnNumber: number) {
+  const progress = ensureItemState(next, playerId);
+  progress.missions[mission]++;
+  if (progress.missions[mission] < itemMissionGoals[mission]) {
+    next.lastItemEvent = undefined;
+    return;
+  }
+
+  progress.missions[mission] = 0;
+  progress.earnedItems++;
+  const random = createRandom(`${next.id}:${turnNumber}:award:${playerId}:${mission}:${progress.earnedItems}`);
   const item = pick(itemIds, random) ?? "lightning";
+  progress.inventory.push(item);
+  next.lastItemEvent = {
+    id: item,
+    label: itemLabels[item],
+    message: `${mission === "attack" ? "공격" : "분열"} 미션 완료! ${itemLabels[item]} 아이템을 얻었어요.`,
+    actorId: playerId,
+    affectedPlayerIds: [playerId],
+    turnNumber,
+    kind: "earned",
+    mission
+  };
+}
+
+function applyItemEffect(next: GameState, playerId: string, item: ItemId, turnNumber: number) {
+  const random = createRandom(`${next.id}:${turnNumber}:use:${playerId}:${item}:${boardSignature(next)}`);
   const actorIndex = next.players.findIndex((player) => player.id === playerId);
   const affected = new Set<number>();
   const mark = (index: number | undefined) => { if (index !== undefined && index >= 0) affected.add(index); };
@@ -148,7 +187,8 @@ function applyItemEffect(next: GameState, playerId: string, action: GameAction, 
     message,
     actorId: playerId,
     affectedPlayerIds: [...affected].map((index) => next.players[index].id),
-    turnNumber
+    turnNumber,
+    kind: "used"
   };
 }
 
@@ -183,6 +223,7 @@ export function applyAction(state: GameState, playerId: string, action: GameActi
 
   const next: GameState = structuredClone(state);
   const nextActor = next.players[next.turnIndex];
+  let completedMission: ItemMissionId | undefined;
   if (action.type === "attack") {
     const target = next.players.find((p) => p.id === action.targetPlayerId);
     if (!target || target.id === playerId || isEliminated(target.hands)) throw new GameRuleError("공격할 수 없는 상대입니다.");
@@ -190,10 +231,19 @@ export function applyAction(state: GameState, playerId: string, action: GameActi
     if (sourceValue === 0) throw new GameRuleError("아웃된 손은 사용할 수 없습니다.");
     if (target.hands[action.targetHand] === 0) throw new GameRuleError("아웃된 손은 공격할 수 없습니다.");
     target.hands[action.targetHand] = attackValue(next, target.hands[action.targetHand], sourceValue);
+    completedMission = "attack";
   } else if (action.type === "split") {
     if (hasRule(next, "no-opening-split") && !next.firstTurnCompleted[playerId]) throw new GameRuleError("첫 턴에는 분열할 수 없습니다.");
     validateSplit(nextActor.hands, action.hands);
     nextActor.hands = [...action.hands] as Hands;
+    completedMission = "split";
+  } else if (action.type === "use-item") {
+    if (!hasRule(next, "items")) throw new GameRuleError("아이템전에서만 아이템을 사용할 수 있습니다.");
+    const itemState = ensureItemState(next, playerId);
+    const itemIndex = itemState.inventory.indexOf(action.itemId);
+    if (itemIndex < 0) throw new GameRuleError("보유하지 않은 아이템입니다.");
+    itemState.inventory.splice(itemIndex, 1);
+    applyItemEffect(next, playerId, action.itemId, state.turnNumber);
   }
 
   if (action.type !== "pass" && hasRule(next, "no-repeat") && next.boardHistory.length >= 2) {
@@ -201,8 +251,8 @@ export function applyAction(state: GameState, playerId: string, action: GameActi
     if (candidate === next.boardHistory[next.boardHistory.length - 2]) throw new GameRuleError("한 수 전의 상태를 반복할 수 없습니다.");
   }
 
-  if (action.type !== "pass" && hasRule(next, "items")) applyItemEffect(next, playerId, action, state.turnNumber);
-  else next.lastItemEvent = undefined;
+  if (completedMission && hasRule(next, "items")) awardMissionProgress(next, playerId, completedMission, state.turnNumber);
+  else if (action.type !== "use-item") next.lastItemEvent = undefined;
 
   next.firstTurnCompleted[playerId] = true;
   next.turnNumber++;
@@ -240,5 +290,8 @@ export function getLegalActions(state: GameState, playerId: string): GameAction[
     });
   });
   if (!(hasRule(state, "no-opening-split") && !state.firstTurnCompleted[playerId])) legalSplits(actor.hands).forEach((hands) => candidates.push({ type: "split", hands }));
+  if (hasRule(state, "items")) {
+    for (const itemId of new Set(state.itemState?.[playerId]?.inventory ?? [])) candidates.push({ type: "use-item", itemId });
+  }
   return candidates.filter((action) => { try { applyAction(state, playerId, action); return true; } catch { return false; } });
 }
