@@ -1,11 +1,17 @@
-import { useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "./session";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const [help, setHelp] = useState(false);
   const location = useLocation();
-  const { user, logout } = useSession();
+  const navigate = useNavigate();
+  const { nickname, setNickname, user, logout } = useSession();
+  const startTutorial = () => {
+    const tutorialName = nickname || user?.nickname || "연습생";
+    localStorage.removeItem("stick-tutorial-done");
+    if (!nickname) setNickname(tutorialName);
+    navigate("/game/ai/local?players=2&rule=classic&rules=classic&difficulty=easy&tutorial=1");
+  };
   return <div className="app-shell">
     <header className="topbar">
       <Link className="brand" to="/"><span>🥢</span>젓가락 온라인</Link>
@@ -17,24 +23,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link to="/auth/login">로그인</Link>
           <Link to="/auth/register">회원가입</Link>
         </>}
-        <button className="link-button" onClick={() => setHelp(true)}>게임 방법</button>
+        <button className="link-button" onClick={startTutorial}>게임 방법</button>
       </div>
     </header>
     <main>{children}</main>
-    {help && <div className="modal-backdrop" onMouseDown={() => setHelp(false)}>
-      <section className="modal" onMouseDown={(event) => event.stopPropagation()}>
-        <button className="modal-close" onClick={() => setHelp(false)}>×</button>
-        <p className="eyebrow">HOW TO PLAY</p>
-        <h2>상대 손을 모두 0으로 만들면 승리!</h2>
-        <ol>
-          <li>내 손 하나를 골라 상대 손을 공격합니다.</li>
-          <li>내 손 숫자가 상대 손에 더해지고, 5 이상이면 그 손은 0이 됩니다.</li>
-          <li>양손 합을 유지하는 다른 조합으로 분열할 수 있습니다.</li>
-          <li>랭킹은 로그인 후 온라인 대전에서만 기록됩니다.</li>
-        </ol>
-        <p className="soft-note">카메라는 영상 대신 손 숫자와 위치만 게임 입력으로 사용합니다. 영상은 서버로 보내지 않아요.</p>
-      </section>
-    </div>}
   </div>;
 }
 

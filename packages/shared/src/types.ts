@@ -6,7 +6,7 @@ export const itemIds = ["lightning", "bomb", "jelly", "wind", "thief"] as const;
 export type ItemId = typeof itemIds[number];
 export const itemMissionIds = ["attack", "split"] as const;
 export type ItemMissionId = typeof itemMissionIds[number];
-export const itemMissionGoals: Record<ItemMissionId, number> = { attack: 5, split: 5 };
+export const itemMissionGoals: Record<ItemMissionId, number> = { attack: 3, split: 3 };
 export type Difficulty = "easy" | "medium" | "hard";
 export type Hands = [number, number];
 

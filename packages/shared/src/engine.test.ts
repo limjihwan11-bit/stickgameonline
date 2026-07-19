@@ -34,9 +34,9 @@ describe("game engine", () => {
     expect(game.rules).toEqual(["no-opening-split", "items"]);
     expect(() => applyAction(game, "a", { type: "split", hands: [0,2] })).toThrow("첫 턴");
   });
-  it("awards a deterministic item after five successful attacks", () => {
+  it("awards a deterministic item after three successful attacks", () => {
     let game = createGame("attack-mission-items", "items", players);
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 3; index++) {
       game.turnIndex = 0; game.players[0].hands = [1,1]; game.players[1].hands = [1,1];
       game = applyAction(game, "a", { type: "attack", sourceHand: 0, targetPlayerId: "b", targetHand: 0 });
     }
@@ -45,9 +45,9 @@ describe("game engine", () => {
     expect(game.lastItemEvent?.kind).toBe("earned");
     expect(game.lastItemEvent?.mission).toBe("attack");
   });
-  it("awards an item after five successful splits", () => {
+  it("awards an item after three successful splits", () => {
     let game = createGame("split-mission-items", "items", players);
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 3; index++) {
       game.turnIndex = 0; game.players[0].hands = [2,0]; game.players[1].hands = [1,1];
       game = applyAction(game, "a", { type: "split", hands: [1,1] });
     }
