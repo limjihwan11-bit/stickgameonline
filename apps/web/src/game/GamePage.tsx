@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Poin
 import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   applyAction, chooseAIAction, createGame, itemMissionGoals, legalSplits, normalizeRuleSet,
-  type Difficulty, type GameAction, type GameState, type ItemId, type RuleId
+  type Difficulty, type GameAction, type GameState, type ItemEvent, type ItemId, type RuleId
 } from "@stickgame/shared";
 import { useSession } from "../session";
 import { rules } from "../ui";
@@ -41,6 +41,22 @@ interface ManualDrag {
   y: number;
 }
 
+interface ItemFx {
+  key: string;
+  id: ItemId;
+  icon: string;
+  label: string;
+  message: string;
+  actorName: string;
+  targetName: string;
+  sx: number;
+  sy: number;
+  mx: number;
+  my: number;
+  tx: number;
+  ty: number;
+}
+
 type TutorialStep = "intro" | "numbers" | "demo" | "drag" | "target" | "wait" | "split" | "camera" | "done";
 
 const tutorialCopy: Record<Exclude<TutorialStep, "done">, { title: string; body: string; position: string; action?: string }> = {
@@ -74,6 +90,22 @@ function playImpactFeedback(power: number) {
   navigator.vibrate?.(Math.min(70, 28 + power * 8));
 }
 
+function elementCenter(stage: HTMLElement, playerId: string) {
+  const stageRect = stage.getBoundingClientRect();
+  const element = stage.querySelector<HTMLElement>(`[data-player-card="${playerId}"]`);
+  if (!element) return { x: 50, y: 50 };
+  const rect = element.getBoundingClientRect();
+  return {
+    x: ((rect.left + rect.width / 2 - stageRect.left) / stageRect.width) * 100,
+    y: ((rect.top + rect.height / 2 - stageRect.top) / stageRect.height) * 100
+  };
+}
+
+function itemStatusText(event: ItemEvent, game: GameState) {
+  const actorName = game.players.find((player) => player.id === event.actorId)?.nickname ?? "플레이어";
+  return `${itemMeta[event.id].icon} ${actorName}이 ${event.label} 사용!`;
+}
+
 export function GamePage() {
   const { mode, gameId } = useParams();
   const [params] = useSearchParams();
@@ -94,6 +126,7 @@ export function GamePage() {
   const [seconds, setSeconds] = useState(30);
   const [aimedTarget, setAimedTarget] = useState("");
   const [impact, setImpact] = useState<ImpactFx | null>(null);
+  const [itemFx, setItemFx] = useState<ItemFx | null>(null);
   const [manualDrag, setManualDrag] = useState<ManualDrag | null>(null);
   const [tutorialStep, setTutorialStep] = useState<TutorialStep>(() => tutorialMode ? "intro" : "done");
   const [remotePoses, setRemotePoses] = useState<Record<string, { x: number; y: number; fingers: number }>>({});
@@ -102,6 +135,8 @@ export function GamePage() {
   const strikeArmed = useRef<Record<0 | 1, boolean>>({ 0: false, 1: false });
   const cooldown = useRef(0);
   const impactTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const itemFxTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastItemFxKey = useRef("");
   const previousGame = useRef<GameState | null>(null);
   const manualDragRef = useRef<ManualDrag | null>(null);
   const camera = useHandCamera();
@@ -133,7 +168,7 @@ export function GamePage() {
     impactTimer.current = setTimeout(() => setImpact(null), 620);
   }, []);
 
-  useEffect(() => () => clearTimeout(impactTimer.current), []);
+  useEffect(() => () => { clearTimeout(impactTimer.current); clearTimeout(itemFxTimer.current); }, []);
 
   useEffect(() => {
     if (local) return;
@@ -228,6 +263,31 @@ export function GamePage() {
   }, [game, playerId, tutorialMode, tutorialStep]);
 
   useEffect(() => {
+    const event = game?.lastItemEvent;
+    if (!game || !event || event.kind !== "used") return;
+    const key = `${game.id}:${event.turnNumber}:${event.actorId}:${event.id}:${event.message}`;
+    if (lastItemFxKey.current === key) return;
+    lastItemFxKey.current = key;
+    const stage = stageRef.current;
+    const actor = game.players.find((player) => player.id === event.actorId);
+    const targetId = event.affectedPlayerIds.find((id) => id !== event.actorId) ?? event.affectedPlayerIds[0] ?? event.actorId;
+    const target = game.players.find((player) => player.id === targetId);
+    const start = stage ? elementCenter(stage, event.actorId) : { x: 50, y: 80 };
+    const end = stage ? elementCenter(stage, targetId) : { x: 50, y: 35 };
+    const middle = event.id === "bomb"
+      ? { x: (start.x + end.x) / 2, y: Math.min(start.y, end.y) - 18 }
+      : { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+    clearTimeout(itemFxTimer.current);
+    setItemFx({
+      key, id: event.id, icon: itemMeta[event.id].icon, label: event.label, message: event.message,
+      actorName: actor?.nickname ?? "플레이어", targetName: target?.nickname ?? "대상",
+      sx: start.x, sy: start.y, mx: middle.x, my: middle.y, tx: end.x, ty: end.y
+    });
+    setMessage(`${actor?.nickname ?? "플레이어"}이 ${event.label} 아이템을 사용했어요.`);
+    itemFxTimer.current = setTimeout(() => setItemFx(null), 1750);
+  }, [game]);
+
+  useEffect(() => {
     const previous = previousGame.current;
     if (previous && game && previous.id === game.id && previous.turnNumber !== game.turnNumber) {
       const previousActor = previous.players[previous.turnIndex];
@@ -310,16 +370,18 @@ export function GamePage() {
   const myItemState = game.itemState?.[playerId] ?? { inventory: [], missions: { attack: 0, split: 0 }, earnedItems: 0 };
   const ruleLabel = currentRules.map((id) => rules.find((rule) => rule.id === id)?.label ?? id).join(" + ");
   const itemEvent = game.lastItemEvent;
+  const activeItemEvent = itemEvent?.kind === "used" ? itemEvent : undefined;
   const myRatingChange = game.ratingChanges?.[playerId];
   return <section className="game-page">
     <div className="game-toolbar"><button className="back-button" onClick={() => navigate("/")}>← 나가기</button><div><b>{local ? `AI ${difficulty === "easy" ? "하" : difficulty === "medium" ? "중" : "상"}` : game.ranked ? "랭크 온라인 대전" : "온라인 대전"}</b><span>{ruleLabel} · {game.players.length}인전</span></div><div className={myTurn ? "turn-clock mine" : "turn-clock"}><small>{game.status === "finished" ? "종료" : myTurn ? "내 차례" : `${actor.nickname} 차례`}</small><b>{seconds}</b></div></div>
     <div className={`game-stage board-${game.players.length} ${impact ? "impacting" : ""}`} ref={stageRef}>
       <div className="action-lines" />
-      <div className="opponents-grid">{opponents.map((player, index) => <article className={`opponent-card seat-${opponentSeats[index]} ${game.status === "playing" && actor.id === player.id ? "active-player" : ""}`} key={player.id}><header><span className="avatar">{player.nickname[0]}</span><div><b>{player.nickname}</b><small>{player.connected ? isDead(player.hands) ? "탈락" : "플레이 중" : "재접속 대기"}</small></div><em>#{index + 2}</em></header><div className="game-hands">{player.hands.map((value, hand) => {
+      {activeItemEvent && <div className={`item-status-banner item-${activeItemEvent.id}`}><span>{itemMeta[activeItemEvent.id].icon}</span><b>{itemStatusText(activeItemEvent, game)}</b><small>{activeItemEvent.message}</small></div>}
+      <div className="opponents-grid">{opponents.map((player, index) => <article data-player-card={player.id} className={`opponent-card seat-${opponentSeats[index]} ${game.status === "playing" && actor.id === player.id ? "active-player" : ""} ${activeItemEvent?.affectedPlayerIds.includes(player.id) ? "item-affected" : ""}`} key={player.id}><header><span className="avatar">{player.nickname[0]}</span><div><b>{player.nickname}</b><small>{player.connected ? isDead(player.hands) ? "탈락" : "플레이 중" : "재접속 대기"}</small></div><em>#{index + 2}</em></header>{activeItemEvent?.actorId === player.id && <ItemBadge event={activeItemEvent} type="actor" />}{activeItemEvent?.affectedPlayerIds.includes(player.id) && <ItemBadge event={activeItemEvent} type="affected" />}<div className="game-hands">{player.hands.map((value, hand) => {
         const key = targetKey(player.id, hand); const tutorialTarget = tutorialActive && (tutorialStep === "target" || tutorialStep === "demo") && index === 0 && hand === 0; return <button key={hand} disabled={!myTurn || value === 0 || me.hands.every((number) => number === 0)} data-opponent-target data-player-hand={key} data-target-player={player.id} data-target-hand={hand} className={`game-hand ${value === 0 ? "dead" : ""} ${aimedTarget === key ? "aimed" : ""} ${impact?.target === key ? "hit" : ""} ${tutorialTarget ? "tutorial-focus" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
       })}</div></article>)}</div>
       <div className={`battle-message ${tutorialActive && tutorialStep === "wait" ? "tutorial-focus" : ""}`}><span className={myTurn ? "pulse" : ""} /><b>{game.status === "finished" ? "게임 끝" : myTurn ? "내 차례" : `${actor.nickname} 차례`}</b><small>{message}</small>{itemEvent && <small className="item-message">🎲 {itemEvent.label}: {itemEvent.message}</small>}</div>
-      <article className={`my-board ${myTurn ? "my-turn" : ""}`}><header><div><p className="eyebrow">YOU</p><h2>{me.nickname}</h2></div><button disabled={camera.status === "loading"} className={`${camera.status === "running" ? "camera-toggle live" : "camera-toggle"} ${tutorialActive && tutorialStep === "camera" ? "tutorial-focus" : ""}`} onClick={camera.start}>{camera.status === "loading" ? "준비 중…" : camera.status === "running" ? "● 타격 모드 ON" : "◉ 카메라 켜기"}</button></header><div className="my-content"><div className="my-hand-select"><label>내 손을 끌어서 상대 손에 놓으세요</label><div className="game-hands">{me.hands.map((value, hand) => {
+      <article data-player-card={me.id} className={`my-board ${myTurn ? "my-turn" : ""} ${activeItemEvent?.affectedPlayerIds.includes(me.id) ? "item-affected" : ""}`}><header><div><p className="eyebrow">YOU</p><h2>{me.nickname}</h2></div><button disabled={camera.status === "loading"} className={`${camera.status === "running" ? "camera-toggle live" : "camera-toggle"} ${tutorialActive && tutorialStep === "camera" ? "tutorial-focus" : ""}`} onClick={camera.start}>{camera.status === "loading" ? "준비 중…" : camera.status === "running" ? "● 타격 모드 ON" : "◉ 카메라 켜기"}</button></header>{activeItemEvent?.actorId === me.id && <ItemBadge event={activeItemEvent} type="actor" />}{activeItemEvent?.affectedPlayerIds.includes(me.id) && <ItemBadge event={activeItemEvent} type="affected" />}<div className="my-content"><div className="my-hand-select"><label>내 손을 끌어서 상대 손에 놓으세요</label><div className="game-hands">{me.hands.map((value, hand) => {
         const key = targetKey(me.id, hand); const tutorialSource = tutorialActive && (tutorialStep === "numbers" || tutorialStep === "demo" || tutorialStep === "drag") && hand === 0; return <button key={hand} data-player-hand={key} onPointerDown={(event) => startManualDrag(event, hand as 0 | 1)} disabled={!myTurn || value === 0} className={`game-hand draggable ${manualDrag?.sourceHand === hand ? "drag-source" : ""} ${value === 0 ? "dead" : ""} ${impact?.target === key ? "hit" : ""} ${impact?.sourceHand === hand ? "striking" : ""} ${tutorialSource ? "tutorial-focus" : ""}`}><FingerIcon value={value} /><b>{value}</b><small>{hand === 0 ? "왼손" : "오른손"}</small></button>;
       })}</div></div><div className={`split-panel ${tutorialActive && tutorialStep === "split" ? "tutorial-focus" : ""}`}><label>손가락 분열</label><div>{splitOptions.length ? splitOptions.map((split) => <button key={split.join("-")} disabled={!myTurn} onClick={() => act({ type: "split", hands: split })}>{split[0]} · {split[1]}</button>) : <small>가능한 조합이 없어요</small>}</div><p>양손을 화면 아래에서 새 숫자로 0.8초 유지해도 됩니다.</p></div>{itemMode && <ItemPanel state={myItemState} myTurn={myTurn} onUse={(itemId) => act({ type: "use-item", itemId })} />}</div>
         {camera.status === "running" && <div className="strike-guide"><span><b>1</b>숫자 맞추기</span><i>→</i><span><b>2</b>아래에 한 번</span><i>→</i><span><b>3</b>상대 손 가까이</span></div>}
@@ -327,6 +389,7 @@ export function GamePage() {
       {camera.hands.map((hand, index) => <VirtualHand key={`${hand.hand}-${index}`} hand={hand} />)}
       {manualDrag && <div className="dragging-hand" style={{ left: manualDrag.x, top: manualDrag.y }} aria-hidden="true"><i /><FingerIcon value={me.hands[manualDrag.sourceHand]} /><b>{me.hands[manualDrag.sourceHand]}</b></div>}
       {Object.entries(remotePoses).map(([id, pose]) => <div key={id} className="remote-gesture" style={{ left: `${pose.x * 100}%`, top: `${pose.y * 100}%` }}><FingerIcon value={pose.fingers} /></div>)}
+      {itemFx && <ItemFxLayer fx={itemFx} />}
       {impact && <div className="impact-burst" style={{ left: `${impact.x}%`, top: `${impact.y}%` }}><div className="shockwave" /><b>+{impact.power} HIT!</b>{Array.from({ length: 10 }, (_, index) => <i key={index} style={{ "--angle": `${index * 36}deg`, "--distance": `${42 + (index % 3) * 13}px` } as CSSProperties} />)}</div>}
       {camera.status !== "idle" && <div className={`tracking-badge ${camera.status}`}><i />{camera.status === "running" ? "손 인식 중 · 영상 비공개" : camera.status === "loading" ? "손 인식 준비 중" : camera.status === "denied" ? "카메라 권한 필요" : "카메라 연결 실패"}</div>}
       {tutorialActive && tutorialStep === "demo" && <div className="tutorial-demo-motion" aria-hidden="true"><div className="demo-path" /><div className="demo-hand"><FingerIcon value={me.hands[0]} /><b>{me.hands[0]}</b></div><span>끌어서 놓기</span></div>}
@@ -338,6 +401,21 @@ export function GamePage() {
 }
 
 const isDead = (hands: [number, number]) => hands[0] === 0 && hands[1] === 0;
+
+function ItemBadge({ event, type }: { event: ItemEvent; type: "actor" | "affected" }) {
+  return <div className={`player-item-badge ${type} item-${event.id}`}><span>{itemMeta[event.id].icon}</span>{type === "actor" ? "아이템 사용" : "효과 적용"}</div>;
+}
+
+function ItemFxLayer({ fx }: { fx: ItemFx }) {
+  const style = {
+    "--sx": `${fx.sx}%`, "--sy": `${fx.sy}%`, "--mx": `${fx.mx}%`, "--my": `${fx.my}%`, "--tx": `${fx.tx}%`, "--ty": `${fx.ty}%`
+  } as CSSProperties;
+  if (fx.id === "lightning") return <div className="item-fx item-lightning" style={style} aria-hidden="true"><div className="storm" /><div className="bolt"><i /><i /><i /></div><b>{fx.icon}</b></div>;
+  if (fx.id === "bomb") return <div className="item-fx item-bomb" style={style} aria-hidden="true"><div className="bomb-projectile">💣</div><div className="bomb-boom">BOOM!</div><i /><i /><i /><i /></div>;
+  if (fx.id === "jelly") return <div className="item-fx item-jelly" style={style} aria-hidden="true"><div className="jelly-orb">🍬</div><div className="heal-ring" /><span>+회복</span></div>;
+  if (fx.id === "wind") return <div className="item-fx item-wind" style={style} aria-hidden="true"><div className="wind-line one" /><div className="wind-line two" /><div className="wind-line three" /><b>🍃 손바람!</b></div>;
+  return <div className="item-fx item-thief" style={style} aria-hidden="true"><div className="thief-glove">🧤</div><div className="swap-spark">SWAP!</div><i /><i /></div>;
+}
 
 function ItemPanel({ state, myTurn, onUse }: { state: { inventory: ItemId[]; missions: { attack: number; split: number } }; myTurn: boolean; onUse: (itemId: ItemId) => void }) {
   const inventoryCounts = state.inventory.reduce<Record<string, number>>((counts, itemId) => ({ ...counts, [itemId]: (counts[itemId] || 0) + 1 }), {});

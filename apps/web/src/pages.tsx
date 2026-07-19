@@ -4,6 +4,17 @@ import { normalizeRuleSet, type Difficulty, type LeaderboardEntry, type RoomSett
 import { useSession } from "./session";
 import { rules, Segmented } from "./ui";
 
+export const onlinePresets = [
+  { id: "quick", title: "빠른 대전", badge: "추천", players: 2 as const, rules: ["classic"] as RuleId[], desc: "2인 · 기본 젓가락 룰", mood: "가장 빠르게 상대를 찾아요." },
+  { id: "items", title: "아이템전", badge: "난장판", players: 2 as const, rules: ["classic", "items"] as RuleId[], desc: "2인 · 미션 아이템", mood: "미션을 깨고 아이템으로 판을 뒤집어요." },
+  { id: "strategy", title: "전략전", badge: "실력전", players: 2 as const, rules: ["classic", "no-repeat", "no-opening-split"] as RuleId[], desc: "2인 · 반복 금지", mood: "같은 상태 반복 없이 머리싸움으로 갑니다." },
+  { id: "triple", title: "3인 난투", badge: "난투", players: 3 as const, rules: ["classic"] as RuleId[], desc: "3인 · 순환 개인전", mood: "동서남북 판에서 한 명씩 살아남아요." },
+  { id: "party", title: "4인 파티전", badge: "파티", players: 4 as const, rules: ["classic", "items"] as RuleId[], desc: "4인 · 클래식 + 아이템", mood: "예측 불가한 파티 모드예요." }
+];
+
+export const queuePathForPreset = (preset: typeof onlinePresets[number]) =>
+  `/queue?players=${preset.players}&rule=${preset.rules[0]}&rules=${ruleQuery(preset.rules)}`;
+
 export function HomePage() {
   const { nickname, setNickname, connected, user } = useSession(); const [draft, setDraft] = useState(nickname); const navigate = useNavigate();
   const [showTutorial, setShowTutorial] = useState(() => localStorage.getItem("stick-tutorial-done") !== "true");
@@ -13,18 +24,18 @@ export function HomePage() {
   const hideTutorial = () => { localStorage.setItem("stick-tutorial-done", "true"); setShowTutorial(false); };
   return <div className="home-page home-page-simple">
     <section className="entry-panel">
-      <label className="nickname-field"><span>게스트 닉네임</span><input value={draft} maxLength={12} placeholder="이름을 입력하세요" onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enter("/queue?players=2&rule=classic")} /></label>
+      <label className="nickname-field"><span>게스트 닉네임</span><input value={draft} maxLength={12} placeholder="이름을 입력하세요" onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && enter("/online")} /></label>
       <div className="connection"><i className={connected ? "online" : ""}/>{connected ? "매칭 서버 연결됨" : "서버 연결 중…"}</div>
       {showTutorial && <div className="tutorial-entry"><div><b>처음이면 여기부터</b><small>컴퓨터랑 한 판 하면서 손을 끌고 공격하는 법을 알려줄게요.</small></div><button className="primary" onClick={startTutorial}>튜토리얼 시작</button><button className="secondary" onClick={hideTutorial}>괜찮아요</button></div>}
       <div className="mode-grid">
-        <button className="mode-card featured" onClick={() => enter("/queue?players=2&rule=classic")}><span className="mode-number">01</span><b>랜덤 시작</b><small>클래식 · 2인전</small><i>→</i></button>
+        <button className="mode-card featured" onClick={() => enter("/online")}><span className="mode-number">01</span><b>온라인 대전</b><small>빠른 대전부터 파티전까지</small><i>→</i></button>
         <button className="mode-card" onClick={() => enter("/setup/ai")}><span className="mode-number">02</span><b>컴퓨터 대전</b><small>난이도와 인원 선택</small><i>→</i></button>
         <button className="mode-card" onClick={() => enter("/friendly")}><span className="mode-number">03</span><b>친선전</b><small>방을 만들고 친구 초대</small><i>→</i></button>
-        <button className="mode-card" onClick={() => enter("/setup/custom")}><span className="mode-number">04</span><b>모드 선택</b><small>원하는 조건으로 공개 매칭</small><i>→</i></button>
+        <button className="mode-card" onClick={() => navigate("/leaderboard")}><span className="mode-number">04</span><b>랭킹</b><small>ELO와 승률 보기</small><i>→</i></button>
       </div>
       <div className="home-sub-actions">
-        <button className="secondary" onClick={() => navigate("/leaderboard")}>랭킹 보기</button>
-        <small>{user ? `${user.nickname} · ${user.elo}점으로 랭크 매칭 가능` : "로그인하면 랜덤 시작과 모드 선택이 랭킹에 기록돼요."}</small>
+        <button className="secondary" onClick={() => enter(queuePathForPreset(onlinePresets[0]))}>바로 빠른 대전</button>
+        <small>{user ? `${user.nickname} · ${user.elo}점으로 온라인 랭크 가능` : "로그인하면 온라인 대전 결과가 랭킹에 기록돼요."}</small>
       </div>
     </section>
   </div>;
@@ -46,23 +57,39 @@ function searchRules(params: URLSearchParams): RuleId[] {
   return normalizeRuleSet(raw.filter((value): value is RuleId => rules.some((rule) => rule.id === value)));
 }
 
+export function OnlinePage() {
+  const { nickname, user } = useSession();
+  const navigate = useNavigate();
+  if (!nickname) return <Navigate to="/" replace />;
+  return <section className="online-page narrow-page">
+    <div className="page-heading"><p className="eyebrow">ONLINE MATCH</p><h1>온라인 대전</h1><p>모드를 고르면 같은 모드를 고른 상대와 바로 매칭됩니다.</p></div>
+    {!user && <p className="ranked-note">게스트는 비랭크로 플레이됩니다. 랭킹에 기록하려면 로그인하세요.</p>}
+    <div className="preset-grid">{onlinePresets.map((preset, index) => <button key={preset.id} className={index === 0 ? "preset-card featured" : "preset-card"} onClick={() => navigate(queuePathForPreset(preset))}>
+      <span>{preset.badge}</span>
+      <b>{preset.title}</b>
+      <small>{preset.desc}</small>
+      <em>{preset.mood}</em>
+      <i>{preset.players}인</i>
+    </button>)}</div>
+  </section>;
+}
+
 export function SetupPage() {
   const { kind } = useParams(); const { nickname } = useSession(); const navigate = useNavigate();
   const [playerCount, setPlayerCount] = useState<2|3|4>(2); const [selectedRules, setSelectedRules] = useState<RuleId[]>(["classic"]); const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   if (!nickname) return <Navigate to="/" replace />;
   const ai = kind === "ai";
+  if (!ai) return <Navigate to="/online" replace />;
   const selectedRuleQuery = ruleQuery(selectedRules);
-  const start = () => ai
-    ? navigate(`/game/ai/local?players=${playerCount}&rule=${selectedRules[0]}&rules=${selectedRuleQuery}&difficulty=${difficulty}`)
-    : navigate(`/queue?players=${playerCount}&rule=${selectedRules[0]}&rules=${selectedRuleQuery}`);
-  return <section className="setup-page narrow-page"><div className="page-heading"><p className="eyebrow">{ai ? "PLAY WITH AI" : "CUSTOM MATCH"}</p><h1>{ai ? "컴퓨터 대전" : "모드 선택"}</h1><p>{ai ? "난이도와 인원을 고르면 바로 시작합니다." : "같은 조건을 고른 플레이어와 연결합니다."}</p></div>
+  const start = () => navigate(`/game/ai/local?players=${playerCount}&rule=${selectedRules[0]}&rules=${selectedRuleQuery}&difficulty=${difficulty}`);
+  return <section className="setup-page narrow-page"><div className="page-heading"><p className="eyebrow">PLAY WITH AI</p><h1>컴퓨터 대전</h1><p>난이도와 인원을 고르면 바로 시작합니다.</p></div>
     <div className="settings-card"><label>참가 인원</label><Segmented value={playerCount} onChange={setPlayerCount} values={[2,3,4].map((n) => ({ value: n as 2|3|4, label: `${n}인` }))}/>
       {ai && <><label>AI 난이도</label><Segmented value={difficulty} onChange={setDifficulty} values={[{value:"easy",label:"하"},{value:"medium",label:"중"},{value:"hard",label:"상"}]}/></>}
       <label>게임 룰 <small>여러 개 선택 가능</small></label><div className="rule-list">{rules.map((item) => {
         const selected = selectedRules.includes(item.id);
         return <button key={item.id} className={selected ? "selected" : ""} onClick={() => setSelectedRules((current) => toggleRule(current, item.id))}><span>{selected ? "☑" : "☐"}</span><div><b>{item.label}</b><small>{item.desc}</small></div></button>;
       })}</div>
-      <button className="primary wide" onClick={start}>{ai ? "AI 대전 시작" : "이 조건으로 매칭"}</button>
+      <button className="primary wide" onClick={start}>AI 대전 시작</button>
     </div></section>;
 }
 
@@ -134,7 +161,7 @@ export function LeaderboardPage() {
     }).catch((nextError) => setError(nextError instanceof Error ? nextError.message : "랭킹을 불러오지 못했습니다.")).finally(() => setLoading(false));
   }, []);
   return <section className="leaderboard-page narrow-page">
-    <div className="page-heading"><p className="eyebrow">LEADERBOARD</p><h1>랭킹</h1><p>랜덤 시작과 모드 선택 공개 매칭만 기록됩니다.</p></div>
+    <div className="page-heading"><p className="eyebrow">LEADERBOARD</p><h1>랭킹</h1><p>온라인 대전 결과만 기록됩니다.</p></div>
     <div className="leaderboard-card">
       {loading && <p className="soft-note">랭킹 불러오는 중…</p>}
       {error && <p className="error">{error}</p>}
